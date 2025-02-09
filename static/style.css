@@ -1,0 +1,17 @@
+
+
+.row {
+    display: flex;
+    height: 100%;
+    -webkit-box-sizing: border-box;
+    box-sizing: border-box;
+}
+
+.column {
+    flex: 50%;
+    margin: 15px;
+}
+
+textarea {
+    height: 100%;
+}

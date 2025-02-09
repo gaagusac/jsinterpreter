@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="{{ url_for('static', filename='bootstrap.min.css') }}" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='codemirror.css') }}" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='dracula.css') }}" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='the-matrix.css') }}" />
+    <title>OLCScript</title>
+</head>
+
+<body style="background-color: darkslategray;">
+    <div class="container">
+        <div class="row mt-3 mb-3">
+            <div class="panel panel-default text-center">
+                <input type="file" id="file-input" style="display: none;" />
+                <input type="button" title="open a local file for editing" value="Browse..." class="btn btn-primary btn-sm" onclick="document.getElementById('file-input').click();" />
+                <button type="button" title="start evaluating the code in the editor window" id="execute" class="btn btn-primary btn-sm" onclick="evalCode();">Eval</button>
+                <button type="button" title="view errors report" id="view_errors" class="btn btn-primary btn-sm" onclick="viewErrorsReport();">Errors Report</button>
+                <button type="button" title="view symbol table" id="view_st" class="btn btn-primary btn-sm" onclick="viewSymbolTable();">Symbol Table</button>
+                <button type="button" title="view about" id="view_about" class="btn btn-primary btn-sm" onclick="showAbout();">About</button>
+            </div>
+        </div>
+        <div class="row mt-3 mb-3">
+                <select class="form-select-sm" name="sample_files" id="input-files">
+                    <option value="Matrices.olc">Matrices.olc</option>
+                    <option value="Vectores.olc">Vectores.olc</option>
+                    <option value="Basicas.olc">Basicas.olc</option>
+                    <option value="Intermedias.olc">Intermedia.olc</option>
+                    <option value="Embebidas.olc">Embebidas.olc</option>
+                    <option value="Recursivas.olc">Recursivas.olc</option>
+                    <option value="Interfaces.olc">Interfaces.olc</option>
+                    <option value="Fibonacci.olc">Fibonacci.olc</option>
+                    <option value="Hanoi.olc">Hanoi.olc</option>
+                    <option value="InterfaceArray.olc">InterfaceArray.olc</option>
+                    <option value="brainfuck.olc">brainfuck.olc</option>
+                </select>
+        </div>
+        <div class="row mt-3 mb-3">
+            <textarea class="form-control" rows="25" name="editor" id="editor"
+                style="display: inline-block; width: 100%;"></textarea>
+        </div>
+        <div class="row mt-3 mb-3">
+                <div class="col-4 text-center">
+                    <button type="button" id="clear_editor" class="btn btn-primary btn-sm" onclick="clearEditorContents();">clear editor</button>
+                </div>
+                <div class="col-4 text-center">
+                    <label class="label label-default" id="linecol" style="color: white;">[Linea: 0 , columna: 0]</label>
+                </div>
+                <div class="col-4 text-center">
+                    <button type="button" id="clear_console" class="btn btn-primary btn-sm" onclick="clearConsoleContents();">clear console</button>
+                </div>
+        </div>
+        <div class="row mt-3 mb-3">
+            <textarea class="form-control" name="console" id="console" placeholder="//Console output"
+                style="display: inline-block;"></textarea>
+        </div>
+    </div>
+    <script src="{{ url_for('static', filename='codemirror.js') }}" type="text/javascript"></script>
+    <script src="{{ url_for('static', filename='javascript.min.js') }}" type="text/javascript"></script>
+    <script src="{{ url_for('static', filename='closebrackets.min.js') }}" type="text/javascript"></script>
+    <script src="{{ url_for('static', filename='jquery-3.6.0.min.js') }}" type="text/javascript"></script>
+    <script src="{{ url_for('static', filename='input-files.js') }}" type="text/javascript"></script>
+
+
+    <script>
+        
+        // The editor 
+        const editor = CodeMirror.fromTextArea(document.getElementById('editor'),
+            {
+                mode: 'text/typescript',
+                lineNumbers: true,
+                lineWrapping: false,
+                indentUnit: 4,
+                closeBrackets: true,
+                theme: 'dracula',
+            }
+        );
+        
+        // The console
+        const theConsole = CodeMirror.fromTextArea(document.getElementById('console'),
+            {
+                mode: 'text',
+                readOnly: true,
+                theme: 'the-matrix'
+            }
+        );
+
+        // Clears the editor window
+        function clearEditorContents() {
+            editor.setValue("");
+            editor.focus();
+        }
+
+        // Clears the console window
+        function clearConsoleContents() {
+            theConsole.setValue("");
+        }
+        
+        // update line and column labels
+        CodeMirror.on(editor, "cursorActivity", (instance, obj) => {
+            lc = document.getElementById('linecol');
+            cur = instance.doc.getCursor();
+            line = cur.line + 1;
+            col = cur.ch + 1;
+            lc.innerHTML = "[Linea: " + line + " ,  " + "Columna: " + col + "]";
+        });
+
+        // Open a file for editing
+        let fileInput = document.getElementById('file-input');
+        fileInput.onchange = () => {
+            const reader = new FileReader();
+            reader.onload = (e) => editor.setValue(e.target.result);
+            for (let file of fileInput.files) {
+                reader.readAsText(file)
+            }
+        };
+
+        // Ajax request to evaluate the source code in the editor
+        function evalCode() {
+            localStorage.clear();
+            const text = editor.getValue();
+            const server_data = {
+                "lang": "olcscript",
+                "payload": text
+            };
+            $.ajax({
+                type: "POST",
+                url: "/eval",
+                data: JSON.stringify(server_data),
+                contentType: "application/json",
+                dataType: 'json',
+                success: function(result) {
+                    updateConsole(result);
+                }
+            });
+        }
+        
+        function viewErrorsReport() {
+            if (localStorage.getItem("errors") == "") {
+                alert("No errors during translation process.");
+            } else {
+                theConsole.replaceRange("\n\n---> ERROR REPORT:\n" + localStorage.getItem("errors"), {line: Infinity});
+            }
+        }
+        
+        function viewSymbolTable() {
+            if (localStorage.getItem("symbols") == "") {
+                alert("No symbols were defined during translations process.");
+            } else {
+                theConsole.replaceRange("\n\n---> SYMBOL TABLE REPORT:\n" + localStorage.getItem("symbols"), {line: Infinity});
+            }
+        }
+        
+        // Show about the program
+        function showAbout() {
+            alert("JSInterpreter - gaagusac");
+        }
+        
+        // Update the console with the result of the ajax request
+        function updateConsole(response) {
+            status_code = response['errs'].toString() ? -1 : 0
+            theConsole.setValue(response['result'].toString() + "\n\n\nTranslation ended, with status code " + status_code + ".\n");
+            localStorage.setItem("errors", response['errs'].toString());
+            localStorage.setItem("symbols", response['symbols'].toString());
+        }
+        
+        // fill the select element
+        const select_element = document.querySelector("#input-files") ;
+        select_element.addEventListener('change', () => {
+            editor.setValue(sample_files_list[select_element.selectedIndex]);
+        });
+        
+    </script>
+</body>
+
+</html>
